@@ -26,7 +26,7 @@ type Job struct {
 type Model struct {
 	ID          string `json:"id"`
 	Description string `json:"description"`
-	Status string `json:"status"` // z.B. "trained", "deployed"
+	Status      string `json:"status"` // z.B. "trained", "deployed"
 }
 
 var (
@@ -116,9 +116,8 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 	mu.Unlock()
 
 	json.NewEncoder(w).Encode(map[string]string{
-		"message":    "Model deployed successfully",
-		"modelId":    model.ID,
-		"newStatus":  model.Status,
+		"message":   "Model deployed successfully",
+		"modelId":   model.ID,
+		"newStatus": model.Status,
 	})
 }
-
