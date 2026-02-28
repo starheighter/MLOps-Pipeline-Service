@@ -15,6 +15,6 @@ spec:
       containers:
       - name: mlops-service
         image: mlops-service:latest
-        imagePullPolicy: Never # <- wichtig, sonst sucht er nach dem Image online
+        imagePullPolicy: Never
         ports:
         - containerPort: 8080
