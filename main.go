@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -34,11 +35,7 @@ var (
 	mu     sync.Mutex
 )
 
-func handleTrain(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func createJob() *Job {
 	jobId := fmt.Sprintf("%d", rand.Intn(100000))
 	job := &Job{ID: jobId, Status: StatusRunning}
 	mu.Lock()
@@ -48,9 +45,23 @@ func handleTrain(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(30 * time.Second)
 		mu.Lock()
 		job.Status = StatusCompleted
-		models[jobId] = &Model{ID: jobId, Description: "Simuliertes Modell", Status: "trained"}
+		models[jobId] = &Model{
+			ID:          jobId,
+			Description: "Simuliertes Modell",
+			Status:      "trained",
+		}
 		mu.Unlock()
 	}()
+	fmt.Println(job)
+	return job
+}
+
+func handleTrain(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	job := createJob()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(job)
 }
@@ -104,6 +115,11 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	if os.Getenv("SEED_JOBS") == "true" {
+		for i := 0; i < 5; i++ {
+			createJob()
+		}
+	}
 	http.HandleFunc("/train", handleTrain)
 	http.HandleFunc("/status/", handleStatus)
 	http.HandleFunc("/model/", handleModel)
