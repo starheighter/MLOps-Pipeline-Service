@@ -10,50 +10,46 @@ import (
 	"time"
 )
 
-type JobStatus string
-
-const (
-	StatusRunning   JobStatus = "running"
-	StatusCompleted JobStatus = "completed"
-	StatusFailed    JobStatus = "failed"
-)
-
-type Job struct {
-	ID     string    `json:"id"`
-	Status JobStatus `json:"status"`
+type Model struct {
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Status       string     `json:"status"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	LearningRate float64    `json:"learningRate"`
+	Accuracy     float64    `json:"accuracy"`
+	Weights      [3]float64 `json:"weights"`
 }
 
-type Model struct {
-	ID          string `json:"id"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
+type DataSet struct {
+	Name   string      `json:"name"`
+	Input  [][]float64 `json:"input"`
+	Output []float64   `json:"output"`
+}
+
+type TrainRequest struct {
+	ModelName    string  `json:"modelName"`
+	LearningRate float64 `json:"learningRate"`
+	DataSet      DataSet `json:"dataSet"`
 }
 
 var (
-	jobs   = make(map[string]*Job)
 	models = make(map[string]*Model)
 	mu     sync.Mutex
 )
 
-func createJob() *Job {
-	jobId := fmt.Sprintf("%d", rand.Intn(100000))
-	job := &Job{ID: jobId, Status: StatusRunning}
-	mu.Lock()
-	jobs[jobId] = job
-	mu.Unlock()
-	go func() {
-		time.Sleep(30 * time.Second)
-		mu.Lock()
-		job.Status = StatusCompleted
-		models[jobId] = &Model{
-			ID:          jobId,
-			Description: "Simuliertes Modell",
-			Status:      "trained",
-		}
-		mu.Unlock()
-	}()
-	fmt.Println(job)
-	return job
+func createModel() *Model {
+	modelId := fmt.Sprintf("%d", rand.Intn(100000))
+	model := &Model{
+		ID:           modelId,
+		Name:         "demo-model",
+		Status:       "created",
+		CreatedAt:    time.Now(),
+		LearningRate: 0.0,
+		Accuracy:     0.0,
+		Weights:      [3]float64{0.0, 0.0, 0.0},
+	}
+	models[modelId] = model
+	return model
 }
 
 func handleTrain(w http.ResponseWriter, r *http.Request) {
@@ -61,33 +57,25 @@ func handleTrain(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	job := createJob()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(job)
-}
-
-func handleStatus(w http.ResponseWriter, r *http.Request) {
-	jobId := r.URL.Path[len("/status/"):]
-	mu.Lock()
-	job, ok := jobs[jobId]
-	mu.Unlock()
-	if !ok {
-		http.Error(w, "Job not found", http.StatusNotFound)
+	var req TrainRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(job)
-}
-
-func handleModel(w http.ResponseWriter, r *http.Request) {
-	modelId := r.URL.Path[len("/model/"):]
 	mu.Lock()
-	model, ok := models[modelId]
+	model := createModel()
 	mu.Unlock()
+	modelId := r.URL.Path[len("/train/"):]
+	mu.Lock()
+	modelId = model.ID
+	model, ok := models[modelId]
 	if !ok {
+		mu.Unlock()
 		http.Error(w, "Model not found", http.StatusNotFound)
 		return
 	}
+	model.Status = "trained"
+	mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(model)
 }
@@ -107,23 +95,50 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	model.Status = "deployed"
 	mu.Unlock()
-	json.NewEncoder(w).Encode(map[string]string{
-		"message":   "Model deployed successfully",
-		"modelId":   model.ID,
-		"newStatus": model.Status,
-	})
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(model)
+}
+
+func handleStatus(w http.ResponseWriter, r *http.Request) {
+	modelId := r.URL.Path[len("/status/"):]
+	mu.Lock()
+	model, ok := models[modelId]
+	mu.Unlock()
+	if !ok {
+		http.Error(w, "Model not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(model)
+}
+
+func handleModels(w http.ResponseWriter, r *http.Request) {
+	mu.Lock()
+	defer mu.Unlock()
+	var list []*Model
+	for _, m := range models {
+		list = append(list, m)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(list)
+}
+
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
 
 func main() {
 	if os.Getenv("SEED_JOBS") == "true" {
 		for i := 0; i < 5; i++ {
-			createJob()
+			createModel()
 		}
 	}
 	http.HandleFunc("/train", handleTrain)
-	http.HandleFunc("/status/", handleStatus)
-	http.HandleFunc("/model/", handleModel)
 	http.HandleFunc("/deploy/", handleDeploy)
+	http.HandleFunc("/status/", handleStatus)
+	http.HandleFunc("/models", handleModels)
+	http.HandleFunc("/health", handleHealth)
 	fmt.Println("Starting server on :8080")
 	http.ListenAndServe(":8080", nil)
 }
