@@ -11,13 +11,13 @@ import (
 )
 
 type Model struct {
-	ID           string     `json:"id"`
-	Name         string     `json:"name"`
-	Status       string     `json:"status"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	LearningRate float64    `json:"learningRate"`
-	Accuracy     float64    `json:"accuracy"`
-	Weights      [3]float64 `json:"weights"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Status       string    `json:"status"`
+	CreatedAt    time.Time `json:"createdAt"`
+	LearningRate float64   `json:"learningRate"`
+	Loss         float64   `json:"loss"`
+	Weights      []float64 `json:"weights"`
 }
 
 type DataSet struct {
@@ -44,35 +44,42 @@ func createModel() *Model {
 		Name:         "demo-model",
 		Status:       "created",
 		CreatedAt:    time.Now(),
-		LearningRate: 0.0,
-		Accuracy:     0.0,
-		Weights:      [3]float64{0.0, 0.0, 0.0},
+		LearningRate: 0.05,
+		Loss:         0.0,
+		Weights:      []float64{0.0, 0.0},
 	}
+	mu.Lock()
 	models[modelId] = model
+	mu.Unlock()
 	return model
 }
 
 func handleTrain(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var req TrainRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	mu.Lock()
-	model := createModel()
-	mu.Unlock()
 	modelId := r.URL.Path[len("/train/"):]
+	trainingData := &DataSet{
+		Name:   "demo-dataset",
+		Input:  [][]float64{{0.2, 0.4}, {0.1, 0.8}, {0.3, 0.3}, {0.5, 0.2}},
+		Output: []float64{1.0, 1.1, 1.2, 1.7},
+	}
 	mu.Lock()
-	modelId = model.ID
 	model, ok := models[modelId]
 	if !ok {
 		mu.Unlock()
 		http.Error(w, "Model not found", http.StatusNotFound)
 		return
+	}
+	for trainLoop := 0; trainLoop < 50; trainLoop++ {
+		for exampleIndex := 0; exampleIndex < len(trainingData.Input); exampleIndex++ {
+			weightedSum := 0.0
+			loss := 0.0
+			for featureIndex := 0; featureIndex < len(trainingData.Input[exampleIndex]); featureIndex++ {
+				weightedSum += model.Weights[featureIndex] * trainingData.Input[exampleIndex][featureIndex]
+			}
+			loss += weightedSum - trainingData.Output[exampleIndex]
+			for featureIndex := 0; featureIndex < len(trainingData.Input[exampleIndex]); featureIndex++ {
+				model.Weights[featureIndex] = model.Weights[featureIndex] - model.LearningRate*loss*trainingData.Input[exampleIndex][featureIndex]
+			}
+		}
 	}
 	model.Status = "trained"
 	mu.Unlock()
@@ -80,12 +87,13 @@ func handleTrain(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(model)
 }
 
-func handleDeploy(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+func handleTest(w http.ResponseWriter, r *http.Request) {
+	modelId := r.URL.Path[len("/test/"):]
+	newData := &DataSet{
+		Name:   "demo-dataset",
+		Input:  [][]float64{{0.4, 0.3}, {0.7, 0.2}},
+		Output: []float64{1.5, 2.3},
 	}
-	modelId := r.URL.Path[len("/deploy/"):]
 	mu.Lock()
 	model, ok := models[modelId]
 	if !ok {
@@ -93,7 +101,16 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Model not found", http.StatusNotFound)
 		return
 	}
-	model.Status = "deployed"
+	loss := 0.0
+	for exampleIndex := 0; exampleIndex < len(newData.Input); exampleIndex++ {
+		weightedSum := 0.0
+		for featureIndex := 0; featureIndex < len(newData.Input[exampleIndex]); featureIndex++ {
+			weightedSum += model.Weights[featureIndex] * newData.Input[exampleIndex][featureIndex]
+		}
+		loss += weightedSum - newData.Output[exampleIndex]
+	}
+	model.Loss = loss
+	model.Status = "tested"
 	mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(model)
@@ -134,8 +151,8 @@ func main() {
 			createModel()
 		}
 	}
-	http.HandleFunc("/train", handleTrain)
-	http.HandleFunc("/deploy/", handleDeploy)
+	http.HandleFunc("/train/", handleTrain)
+	http.HandleFunc("/test/", handleTest)
 	http.HandleFunc("/status/", handleStatus)
 	http.HandleFunc("/models", handleModels)
 	http.HandleFunc("/health", handleHealth)
