@@ -1,27 +1,38 @@
-package main
+package handlersservices
 
-func Trainset(index string) *DataSet {
+type DataSet struct {
+	Code   string      `json:"code"`
+	Name   string      `json:"name"`
+	Input  [][]float64 `json:"input"`
+	Output []float64   `json:"output"`
+}
+
+func Trainset(code string) *DataSet {
 	trainData := &DataSet{
-		Name:   "dummytestset",
+		Code:   "dy",
+		Name:   "Dummy",
 		Input:  [][]float64{{0.0, 0.0}},
 		Output: []float64{0.0},
 	}
-	switch index {
-	case "1":
+	switch code {
+	case "hp":
 		trainData = &DataSet{
-			Name:   "trainset1",
+			Code:   "hp",
+			Name:   "HousingPrices",
 			Input:  [][]float64{{0.2, 0.4}, {0.1, 0.8}, {0.3, 0.3}, {0.5, 0.2}},
 			Output: []float64{1.0, 1.1, 1.2, 1.7},
 		}
-	case "2":
+	case "rd":
 		trainData = &DataSet{
-			Name:   "trainset2",
+			Code:   "rd",
+			Name:   "RetailDemand",
 			Input:  [][]float64{{0.2, 0.4}, {0.1, 0.8}, {0.3, 0.3}, {0.5, 0.2}},
 			Output: []float64{0.0, -0.6, 0.3, 0.8},
 		}
-	case "3":
+	case "tf":
 		trainData = &DataSet{
-			Name:   "trainset3",
+			Code:   "tf",
+			Name:   "TrafficFlow",
 			Input:  [][]float64{{0.2, 0.4}, {0.1, 0.8}, {0.3, 0.3}, {0.5, 0.2}},
 			Output: []float64{0.2, 0.7, 0.0, -0.3},
 		}
@@ -29,28 +40,32 @@ func Trainset(index string) *DataSet {
 	return trainData
 }
 
-func Testset(index string) *DataSet {
+func Testset(code string) *DataSet {
 	testData := &DataSet{
-		Name:   "dummytestset",
+		Code:   "dy",
+		Name:   "Dummy",
 		Input:  [][]float64{{0.0, 0.0}},
 		Output: []float64{0.0},
 	}
-	switch index {
-	case "1":
+	switch code {
+	case "hp":
 		testData = &DataSet{
-			Name:   "testset1",
+			Code:   "hp",
+			Name:   "HousingPrices",
 			Input:  [][]float64{{0.4, 0.3}, {0.2, 0.7}},
 			Output: []float64{1.5, 1.3},
 		}
-	case "2":
+	case "rd":
 		testData = &DataSet{
-			Name:   "testset2",
+			Code:   "rd",
+			Name:   "RetailDemand",
 			Input:  [][]float64{{0.4, 0.3}, {0.2, 0.7}},
 			Output: []float64{0.5, -0.3},
 		}
-	case "3":
+	case "tf":
 		testData = &DataSet{
-			Name:   "testset3",
+			Code:   "tf",
+			Name:   "TrafficFlow",
 			Input:  [][]float64{{0.4, 0.3}, {0.2, 0.7}},
 			Output: []float64{-0.1, 0.5},
 		}
