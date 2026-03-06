@@ -1,7 +1,6 @@
 # MLOps Demo Service
 
 ## Overview
-
 This project is a small **MLOps-style demo service written in Go**.
 It exposes a REST API that allows users to **train and test simple machine learning models** through HTTP endpoints.
 
@@ -16,7 +15,6 @@ The application can be **containerized with Docker** and deployed to a **local K
 
 
 # Architecture
-
 The service is implemented in Go and exposes an HTTP API on port **8080**.
 
 Internally the service stores models in memory using a map:
@@ -37,7 +35,6 @@ The datasets used for training and testing are provided by the `datahandler.go` 
 
 
 # Project Structure
-
 .
 ├── main.go
 ├── datahandler.go
@@ -108,7 +105,6 @@ OK
 Used to verify that the service is running.
 
 # List All Models
-
 GET /models
 Returns all models currently stored in memory.
 
@@ -130,7 +126,6 @@ Example response:
 ```
 
 # Get a Model
-
 GET /model/{modelId}
 
 Example:
@@ -169,7 +164,6 @@ The updated model is returned as JSON.
 
 # Environment Variables
 ### SEED_JOBS
-
 SEED_JOBS=true
 
 If this variable is enabled, the service automatically creates **five demo models on startup**.
