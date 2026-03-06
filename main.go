@@ -6,18 +6,20 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
 
 type Model struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"createdAt"`
-	LearningRate float64   `json:"learningRate"`
-	Loss         float64   `json:"loss"`
-	Weights      []float64 `json:"weights"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Status           string    `json:"status"`
+	CreatedAt        time.Time `json:"createdAt"`
+	NumberTrainLoops int       `json:"numberTrainLoops"`
+	LearningRate     float64   `json:"learningRate"`
+	Loss             float64   `json:"loss"`
+	Weights          []float64 `json:"weights"`
 }
 
 type DataSet struct {
@@ -38,15 +40,16 @@ var (
 )
 
 func createModel() *Model {
-	modelId := fmt.Sprintf("%d", rand.Intn(100000))
+	modelId := fmt.Sprintf("%d", 10000+rand.Intn(90000))
 	model := &Model{
-		ID:           modelId,
-		Name:         "demo-model",
-		Status:       "created",
-		CreatedAt:    time.Now(),
-		LearningRate: 0.05,
-		Loss:         0.0,
-		Weights:      []float64{0.0, 0.0},
+		ID:               modelId,
+		Name:             "demo-model",
+		Status:           "created",
+		CreatedAt:        time.Now(),
+		NumberTrainLoops: 150,
+		LearningRate:     0.05,
+		Loss:             0.0,
+		Weights:          []float64{0.0, 0.0},
 	}
 	mu.Lock()
 	models[modelId] = model
@@ -55,12 +58,10 @@ func createModel() *Model {
 }
 
 func handleTrain(w http.ResponseWriter, r *http.Request) {
-	modelId := r.URL.Path[len("/train/"):]
-	trainingData := &DataSet{
-		Name:   "demo-dataset",
-		Input:  [][]float64{{0.2, 0.4}, {0.1, 0.8}, {0.3, 0.3}, {0.5, 0.2}},
-		Output: []float64{1.0, 1.1, 1.2, 1.7},
-	}
+	parameters := strings.Split(r.URL.Path[len("/train/"):], "/")
+	modelId := parameters[0]
+	datasetIndex := parameters[1]
+	trainData := Trainset(datasetIndex)
 	mu.Lock()
 	model, ok := models[modelId]
 	if !ok {
@@ -68,16 +69,16 @@ func handleTrain(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Model not found", http.StatusNotFound)
 		return
 	}
-	for trainLoop := 0; trainLoop < 50; trainLoop++ {
-		for exampleIndex := 0; exampleIndex < len(trainingData.Input); exampleIndex++ {
+	for trainLoop := 0; trainLoop < model.NumberTrainLoops; trainLoop++ {
+		for exampleIndex := 0; exampleIndex < len(trainData.Input); exampleIndex++ {
 			weightedSum := 0.0
 			loss := 0.0
-			for featureIndex := 0; featureIndex < len(trainingData.Input[exampleIndex]); featureIndex++ {
-				weightedSum += model.Weights[featureIndex] * trainingData.Input[exampleIndex][featureIndex]
+			for featureIndex := 0; featureIndex < len(trainData.Input[exampleIndex]); featureIndex++ {
+				weightedSum += model.Weights[featureIndex] * trainData.Input[exampleIndex][featureIndex]
 			}
-			loss += weightedSum - trainingData.Output[exampleIndex]
-			for featureIndex := 0; featureIndex < len(trainingData.Input[exampleIndex]); featureIndex++ {
-				model.Weights[featureIndex] = model.Weights[featureIndex] - model.LearningRate*loss*trainingData.Input[exampleIndex][featureIndex]
+			loss += weightedSum - trainData.Output[exampleIndex]
+			for featureIndex := 0; featureIndex < len(trainData.Input[exampleIndex]); featureIndex++ {
+				model.Weights[featureIndex] = model.Weights[featureIndex] - model.LearningRate*loss*trainData.Input[exampleIndex][featureIndex]
 			}
 		}
 	}
@@ -88,12 +89,10 @@ func handleTrain(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTest(w http.ResponseWriter, r *http.Request) {
-	modelId := r.URL.Path[len("/test/"):]
-	newData := &DataSet{
-		Name:   "demo-dataset",
-		Input:  [][]float64{{0.4, 0.3}, {0.7, 0.2}},
-		Output: []float64{1.5, 2.3},
-	}
+	parameters := strings.Split(r.URL.Path[len("/test/"):], "/")
+	modelId := parameters[0]
+	datasetIndex := parameters[1]
+	testData := Testset(datasetIndex)
 	mu.Lock()
 	model, ok := models[modelId]
 	if !ok {
@@ -102,12 +101,12 @@ func handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	loss := 0.0
-	for exampleIndex := 0; exampleIndex < len(newData.Input); exampleIndex++ {
+	for exampleIndex := 0; exampleIndex < len(testData.Input); exampleIndex++ {
 		weightedSum := 0.0
-		for featureIndex := 0; featureIndex < len(newData.Input[exampleIndex]); featureIndex++ {
-			weightedSum += model.Weights[featureIndex] * newData.Input[exampleIndex][featureIndex]
+		for featureIndex := 0; featureIndex < len(testData.Input[exampleIndex]); featureIndex++ {
+			weightedSum += model.Weights[featureIndex] * testData.Input[exampleIndex][featureIndex]
 		}
-		loss += weightedSum - newData.Output[exampleIndex]
+		loss += weightedSum - testData.Output[exampleIndex]
 	}
 	model.Loss = loss
 	model.Status = "tested"
@@ -116,8 +115,8 @@ func handleTest(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(model)
 }
 
-func handleStatus(w http.ResponseWriter, r *http.Request) {
-	modelId := r.URL.Path[len("/status/"):]
+func handleModel(w http.ResponseWriter, r *http.Request) {
+	modelId := r.URL.Path[len("/model/"):]
 	mu.Lock()
 	model, ok := models[modelId]
 	mu.Unlock()
@@ -153,7 +152,7 @@ func main() {
 	}
 	http.HandleFunc("/train/", handleTrain)
 	http.HandleFunc("/test/", handleTest)
-	http.HandleFunc("/status/", handleStatus)
+	http.HandleFunc("/model/", handleModel)
 	http.HandleFunc("/models", handleModels)
 	http.HandleFunc("/health", handleHealth)
 	fmt.Println("Starting server on :8080")
