@@ -1,11 +1,13 @@
 package handlersservices
 
 import (
-	"encoding/json"
+	"bufio"
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -14,12 +16,23 @@ type Model struct {
 	Name             string    `json:"name"`
 	Status           string    `json:"status"`
 	CreatedAt        time.Time `json:"createdAt"`
-	DatasetCode      string    `json:"datasetCode"`
 	NumberTrainLoops int       `json:"numberTrainLoops"`
 	LearningRate     float64   `json:"learningRate"`
 	Loss             float64   `json:"loss"`
 	Weights          []float64 `json:"weights"`
 }
+
+type DataSet struct {
+	InputFile  string      `json:"inputHeader"`
+	OutputFile string      `json:"outputHeader"`
+	Input      [][]float64 `json:"input"`
+	Output     []float64   `json:"output"`
+}
+
+var (
+	models = make(map[string]*Model)
+	mu     sync.Mutex
+)
 
 func CreateModel() *Model {
 	modelId := fmt.Sprintf("%d", 10000+rand.Intn(90000))
@@ -28,9 +41,8 @@ func CreateModel() *Model {
 		Name:             "demo-model",
 		Status:           "created",
 		CreatedAt:        time.Now(),
-		DatasetCode:      "",
-		NumberTrainLoops: 150,
-		LearningRate:     0.05,
+		NumberTrainLoops: 0,
+		LearningRate:     0.0,
 		Loss:             0.0,
 		Weights:          []float64{0.0, 0.0},
 	}
@@ -41,8 +53,20 @@ func CreateModel() *Model {
 }
 
 func HandleTrain(w http.ResponseWriter, r *http.Request) {
-	parameters := strings.Split(r.URL.Path[len("/train/"):], "/")
-	modelId := parameters[0]
+	http.ServeFile(w, r, "templates/train.html")
+}
+
+func HandleTest(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "templates/test.html")
+}
+
+func HandleTraining(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	r.ParseMultipartForm(10 << 20)
+	modelId := r.FormValue("model_id")
 	mu.Lock()
 	model, ok := models[modelId]
 	if !ok {
@@ -50,19 +74,69 @@ func HandleTrain(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Model not found", http.StatusNotFound)
 		return
 	}
-	if model.DatasetCode == "" {
-		if len(parameters) < 2 {
-			mu.Unlock()
-			http.Error(w, "Missing DatasetCode parameter", http.StatusBadRequest)
+	numberTrainLoops, err := strconv.Atoi(r.FormValue("number_train_loops"))
+	if err != nil {
+		mu.Unlock()
+		http.Error(w, "Number Train Loops must be a number", http.StatusBadRequest)
+		return
+	}
+	model.NumberTrainLoops = numberTrainLoops
+	learningRate, err := strconv.ParseFloat(r.FormValue("learning_rate"), 64)
+	if err != nil {
+		mu.Unlock()
+		http.Error(w, "Learning Rate must be a float", http.StatusBadRequest)
+		return
+	}
+	model.LearningRate = learningRate
+	inputFile, inputHeader, err := r.FormFile("input_file")
+	if err != nil {
+		mu.Unlock()
+		http.Error(w, "Input file missing", http.StatusBadRequest)
+		return
+	}
+	defer inputFile.Close()
+	outputFile, outputHeader, err := r.FormFile("output_file")
+	if err != nil {
+		mu.Unlock()
+		http.Error(w, "Output file missing", http.StatusBadRequest)
+		return
+	}
+	defer outputFile.Close()
+	var inputData [][]float64
+	scanner := bufio.NewScanner(inputFile)
+	for scanner.Scan() {
+		line := scanner.Text()
+		values := strings.Fields(line)
+		var row []float64
+		for _, v := range values {
+			num, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				mu.Unlock()
+				http.Error(w, "Input data has to contain only float numbers", http.StatusBadRequest)
+				return
+			}
+			row = append(row, num)
 		}
-		if parameters[1] != "dy" && parameters[1] != "hp" && parameters[1] != "rd" && parameters[1] != "tf" {
+		inputData = append(inputData, row)
+	}
+	var outputData []float64
+	scanner = bufio.NewScanner(outputFile)
+	for scanner.Scan() {
+		line := scanner.Text()
+		num, err := strconv.ParseFloat(line, 64)
+		if err != nil {
 			mu.Unlock()
-			http.Error(w, "DatasetCode not found", http.StatusNotFound)
+			http.Error(w, "Output data has to contain only float numbers", http.StatusBadRequest)
 			return
 		}
-		model.DatasetCode = parameters[1]
+		outputData = append(outputData, num)
 	}
-	trainData := Trainset(model.DatasetCode)
+	trainData := &DataSet{
+		InputFile:  inputHeader.Filename,
+		OutputFile: outputHeader.Filename,
+		Input:      inputData,
+		Output:     outputData,
+	}
 	for trainLoop := 0; trainLoop < model.NumberTrainLoops; trainLoop++ {
 		for exampleIndex := 0; exampleIndex < len(trainData.Input); exampleIndex++ {
 			weightedSum := 0.0
@@ -78,12 +152,16 @@ func HandleTrain(w http.ResponseWriter, r *http.Request) {
 	}
 	model.Status = "trained"
 	mu.Unlock()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(model)
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-func HandleTest(w http.ResponseWriter, r *http.Request) {
-	modelId := r.URL.Path[len("/test/"):]
+func HandleTesting(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	r.ParseMultipartForm(10 << 20)
+	modelId := r.FormValue("model_id")
 	mu.Lock()
 	model, ok := models[modelId]
 	if !ok {
@@ -91,7 +169,55 @@ func HandleTest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Model not found", http.StatusNotFound)
 		return
 	}
-	testData := Testset(model.DatasetCode)
+	inputFile, inputHeader, err := r.FormFile("input_file")
+	if err != nil {
+		mu.Unlock()
+		http.Error(w, "Input file missing", http.StatusBadRequest)
+		return
+	}
+	defer inputFile.Close()
+	outputFile, outputHeader, err := r.FormFile("output_file")
+	if err != nil {
+		mu.Unlock()
+		http.Error(w, "Output file missing", http.StatusBadRequest)
+		return
+	}
+	defer outputFile.Close()
+	var inputData [][]float64
+	scanner := bufio.NewScanner(inputFile)
+	for scanner.Scan() {
+		line := scanner.Text()
+		values := strings.Fields(line)
+		var row []float64
+		for _, v := range values {
+			num, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				mu.Unlock()
+				http.Error(w, "Input data has to contain only float numbers", http.StatusBadRequest)
+				return
+			}
+			row = append(row, num)
+		}
+		inputData = append(inputData, row)
+	}
+	var outputData []float64
+	scanner = bufio.NewScanner(outputFile)
+	for scanner.Scan() {
+		line := scanner.Text()
+		num, err := strconv.ParseFloat(line, 64)
+		if err != nil {
+			mu.Unlock()
+			http.Error(w, "Output data has to contain only float numbers", http.StatusBadRequest)
+			return
+		}
+		outputData = append(outputData, num)
+	}
+	testData := &DataSet{
+		InputFile:  inputHeader.Filename,
+		OutputFile: outputHeader.Filename,
+		Input:      inputData,
+		Output:     outputData,
+	}
 	loss := 0.0
 	for exampleIndex := 0; exampleIndex < len(testData.Input); exampleIndex++ {
 		weightedSum := 0.0
@@ -103,6 +229,5 @@ func HandleTest(w http.ResponseWriter, r *http.Request) {
 	model.Loss = loss
 	model.Status = "tested"
 	mu.Unlock()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(model)
+	http.Redirect(w, r, "/", http.StatusFound)
 }

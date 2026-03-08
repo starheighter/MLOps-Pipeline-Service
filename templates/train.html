@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Upload Dataset</title>
+</head>
+
+<body>
+    <h2>Upload Training Files</h2>
+    <form action="/training/" method="POST" enctype="multipart/form-data">
+        <label>Model ID:</label><br>
+        <input type="text" name="model_id" required><br><br>
+        <label>Number Train Loops:</label><br>
+        <input type="number" name="number_train_loops" required><br><br>
+        <label>Learning Rate:</label><br>
+        <input type="text" name="learning_rate"><br><br>
+        <label>Input File:</label><br>
+        <input type="file" name="input_file" accept=".txt"><br><br>
+        <label>Output File:</label><br>
+        <input type="file" name="output_file" accept=".txt"><br><br>
+        <button type="submit">Start Train</button>
+    </form>
+</body>
+
+</html>
