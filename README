@@ -1,216 +1,208 @@
 # MLOps Pipeline Service
 
 ## Overview
-This project is a small **MLOps-style demo service written in Go**.
-It exposes a REST API that allows users to **train and test simple machine learning models** through HTTP endpoints.
-
-The service simulates a minimal machine learning workflow:
-
-1. Models are created and stored in memory.
-2. A model can be trained using predefined training datasets.
-3. The trained model can be evaluated using predefined test datasets.
-4. Model information can be retrieved via API endpoints.
-
-The application can be **containerized with Docker** and deployed to a **local Kubernetes cluster using Minikube**.
-
+The **MLOps Pipeline Service** is a lightweight web service written in **Go** that demonstrates a simple end-to-end machine learning pipeline.
+It allows users to:
+* Upload datasets for **training**
+* Train a simple **linear model**
+* Upload datasets for **testing**
+* Evaluate the trained model
+* Inspect model metadata through a **REST API**
+The service provides a minimal web interface for uploading datasets and a JSON API to inspect models.
+The application is containerized with **Docker** and can be deployed to **Kubernetes**.
 
 ## Architecture
-The service is implemented in Go and exposes an HTTP API on port **8080**.
+The service consists of the following components:
 
-Internally the service stores models in memory using a map:
-models = map[string]*Model
+* **HTTP Server (Go)**
+  Handles requests for training, testing, model inspection, and health checks.
 
-Each model contains:
-* ID
-* name
-* training status
-* creation timestamp
-* learning rate
-* number of training loops
-* loss value
-* weight vector
+* **Handlers and Services**
+  * Dataset extraction and parsing
+  * Model creation and training
+  * Model testing
+  * API endpoints
 
-The training logic implements a very simplified **gradient descent algorithm** for a linear model.
-The datasets used for training and testing are provided by the `datahandler.go` file.
+* **HTML Templates**
+  * Web forms for uploading training and testing datasets
 
+* **Containerization**
+  * Docker image builds the Go application and bundles templates.
+
+* **Kubernetes Deployment**
+  * Deployment for running the service
+  * NodePort service for external access
+  * Health checks for container monitoring
 
 ## Project Structure
-.
+MLOpsPipelineservice/
+│
 ├── main.go
-├── datahandler.go
 ├── go.mod
 ├── Dockerfile
-├── deployment.yaml
-├── service.yaml
-└── README.md
+├── .gitignore
+│
+├── handlersservices/
+│   ├── dataservice.go
+│   ├── infohandler.go
+│   └── modelhandler.go
+│
+├── templates/
+│   ├── train.html
+│   └── test.html
+│
+├── exampledata/
+│   ├── train_input.txt
+│   ├── train_output.txt
+│   ├── test_input.txt
+│   └── test_output.txt
+│
+└── k8s/
+    ├── deployment.yaml
+    └── service.yaml
 
-Description:
+## Features
+* Upload datasets using a **web interface**
+* Train a simple linear model using gradient descent
+* Evaluate the model with a test dataset
+* Retrieve model information via JSON API
+* Containerized using **Docker**
+* Deployable to **Kubernetes**
+* Built-in **health checks**
 
-| File              | Description                                       |
-| ----------------- | ------------------------------------------------- |
-| `main.go`         | Main application with HTTP API and training logic |
-| `datahandler.go`  | Provides predefined training and test datasets    |
-| `go.mod`          | Go module definition                              |
-| `Dockerfile`      | Docker image configuration                        |
-| `deployment.yaml` | Kubernetes Deployment configuration               |
-| `service.yaml`    | Kubernetes Service configuration                  |
+## Model Training
+The training process uses a simple linear regression style update rule.
+For each training loop and dataset sample:
+1. Compute the weighted sum of features.
+2. Calculate the prediction error.
+3. Update model weights using the learning rate.
 
-## Data Handling
-The file **`datahandler.go`** contains predefined datasets used by the training and testing endpoints.
-Two functions are provided:
+Weights are updated according to:
+weight = weight - learning_rate * loss * feature
 
-### Trainset
-Trainset(index string)
-Returns a training dataset depending on the given index.
+## HTTP Endpoints
+| Endpoint        | Method | Description                                 |
+| --------------- | ------ | ------------------------------------------- |
+| `/`             | GET    | List all models (JSON)                      |
+| `/train`        | GET    | Display training upload form                |
+| `/test`         | GET    | Display testing upload form                 |
+| `/training/`    | POST   | Train a new model                           |
+| `/testing/`     | POST   | Test an existing model                      |
+| `/model/{name}` | GET    | Retrieve information about a specific model |
+| `/health`       | GET    | Health check endpoint                       |
 
-Available datasets:
+## Dataset Format
+Datasets are uploaded as **two text files**:
 
-| Index | Dataset   |
-| ----- | --------- |
-| `"1"` | trainset1 |
-| `"2"` | trainset2 |
-| `"3"` | trainset3 |
+### Input File
+Each line contains space-separated feature values.
 
-Each dataset contains:
+Example:
 
-* input feature vectors
-* expected output values
+0.2 0.4
+0.1 0.8
+0.3 0.3
+0.5 0.2
 
-Example structure:
+### Output File
+Each line contains the corresponding expected output value.
 
-Input:  [[0.2,0.4], [0.1,0.8], ...]
-Output: [1.0, 1.1, ...]
+Example:
 
+1.0
+1.1
+1.2
+1.7
 
-### Testset
-Testset(index string)
-Returns a test dataset used to evaluate a trained model.
+The number of input samples must match the number of output samples.
 
-Available datasets:
+## Running Locally
+### 1. Clone the repository
+git clone https://github.com/starheighter/MLOpsPipelineservice.git
+cd MLOpsPipelineservice
 
-| Index | Dataset  |
-| ----- | -------- |
-| `"1"` | testset1 |
-| `"2"` | testset2 |
-| `"3"` | testset3 |
+### 2. Run the application
+go run main.go
 
+The server will start on:
+http://localhost:8080
 
-## API Endpoints
+## Using the Web Interface
+### Train a model
+Open:
+http://localhost:8080/train
 
-### Health Check
+Upload:
+* training input file
+* training output file
+* number of training loops
+* learning rate
+
+### Test a model
+Open:
+http://localhost:8080/test
+
+Upload:
+* test input file
+* test output file
+* model name
+
+## Docker
+Build the Docker image:
+docker build -t mlops-service .
+
+Run the container:
+docker run -p 8080:8080 mlops-service
+
+## Kubernetes Deployment
+The project contains Kubernetes manifests in the `k8s/` directory.
+
+## Deploy
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+
+## Check resources
+kubectl get pods
+kubectl get services
+
+The service is exposed as a **NodePort**.
+
+Access the application using:
+http://<NODE-IP>:<NODE-PORT>
+
+## Health Checks
+The service provides a health endpoint used by Kubernetes:
 GET /health
 
 Response:
 OK
-Used to verify that the service is running.
 
-### List All Models
-GET /models
-Returns all models currently stored in memory.
+This endpoint is used for:
+* **Liveness probe**
+* **Readiness probe**
 
-Example response:
+## Example Dataset
+Example datasets are provided in the `exampledata/` directory.
 
-```json
-[
-  {
-    "id": "54321",
-    "name": "demo-model",
-    "status": "created",
-    "createdAt": "2026-03-06T10:00:00Z",
-    "numberTrainLoops": 150,
-    "learningRate": 0.05,
-    "loss": 0,
-    "weights": [0,0]
-  }
-]
-```
+Training data:
+* `train_input.txt`
+* `train_output.txt`
 
-### Get a Model
-GET /model/{modelId}
+Testing data:
+* `test_input.txt`
+* `test_output.txt`
 
-Example:
+These files can be uploaded directly through the web interface.
 
-GET /model/12345
-Returns the model with the specified ID.
-
-
-### Train a Model
-POST /train/{modelId}/{datasetIndex}
-
-Example:
-POST /train/12345/1
-
-Behavior:
-1. The dataset is loaded using `Trainset(datasetIndex)`
-2. The model weights are updated using gradient descent
-3. Training runs for `NumberTrainLoops` iterations
-4. Model status becomes `"trained"`
-
-The updated model is returned as JSON.
-
-### Test a Model
-POST /test/{modelId}/{datasetIndex}
-
-Example:
-POST /test/12345/1
-
-Behavior:
-1. Loads test data using `Testset(datasetIndex)`
-2. Computes the prediction error (loss)
-3. Updates the model loss
-4. Model status becomes `"tested"`
-
-The updated model is returned as JSON.
-
-## Environment Variables
-### SEED_JOBS
-SEED_JOBS=true
-
-If this variable is enabled, the service automatically creates **five demo models on startup**.
-This allows immediate testing of the API without creating models manually.
-
-
-## Running the Project with Minikube
-The service is intended to run inside a **local Kubernetes cluster using Minikube**.
-
-### 1 Start Minikube
-minikube start
-
-### 2 Use the Minikube Docker Environment
-This allows Docker images to be built directly inside the cluster.
-eval $(minikube docker-env)
-
-### 3 Build the Docker Image
-docker build -t mlops-service .
-
-### 4 Deploy the Application
-kubectl apply -f deployment.yaml
-kubectl apply -f service.yaml
-
-This creates:
-* a Kubernetes Deployment
-* a Kubernetes Service
-
-## Accessing the Service
-After deployment you can access the service using:
-minikube service mlops-service
-or by using the NodePort defined in `service.yaml`.
-
-## Example Requests
-List models:
-curl http://localhost:8080/models
-
-Train a model:
-curl -X POST http://localhost:8080/train/12345/1
-
-Test a model:
-curl -X POST http://localhost:8080/test/12345/1
-
-## Notes
-* Models are stored **in memory only**.
-* Restarting the container or pod will remove all models.
-* The training algorithm is intentionally simplified for demonstration purposes.
-* The project is intended for experimenting with **Go services, Docker, and Kubernetes deployments**.
+## Possible Improvements
+This project is intentionally simple and can be extended with:
+* Persistent model storage
+* Model versioning
+* Metrics tracking
+* Logging and monitoring
+* API authentication
+* Support for additional ML algorithms
+* Integration with real MLOps tools
 
 ## License
-This project is intended for educational purposes.
+This project is intended for educational and demonstration purposes.
