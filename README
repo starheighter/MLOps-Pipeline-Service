@@ -1,4 +1,4 @@
-# MLOps Demo Service
+# MLOps Pipeline Service
 
 ## Overview
 This project is a small **MLOps-style demo service written in Go**.
@@ -14,7 +14,7 @@ The service simulates a minimal machine learning workflow:
 The application can be **containerized with Docker** and deployed to a **local Kubernetes cluster using Minikube**.
 
 
-# Architecture
+## Architecture
 The service is implemented in Go and exposes an HTTP API on port **8080**.
 
 Internally the service stores models in memory using a map:
@@ -34,7 +34,7 @@ The training logic implements a very simplified **gradient descent algorithm** f
 The datasets used for training and testing are provided by the `datahandler.go` file.
 
 
-# Project Structure
+## Project Structure
 .
 ├── main.go
 ├── datahandler.go
@@ -55,7 +55,7 @@ Description:
 | `deployment.yaml` | Kubernetes Deployment configuration               |
 | `service.yaml`    | Kubernetes Service configuration                  |
 
-# Data Handling
+## Data Handling
 The file **`datahandler.go`** contains predefined datasets used by the training and testing endpoints.
 Two functions are provided:
 
@@ -95,16 +95,16 @@ Available datasets:
 | `"3"` | testset3 |
 
 
-# API Endpoints
+## API Endpoints
 
-## Health Check
+### Health Check
 GET /health
 
 Response:
 OK
 Used to verify that the service is running.
 
-# List All Models
+### List All Models
 GET /models
 Returns all models currently stored in memory.
 
@@ -125,7 +125,7 @@ Example response:
 ]
 ```
 
-# Get a Model
+### Get a Model
 GET /model/{modelId}
 
 Example:
@@ -134,7 +134,7 @@ GET /model/12345
 Returns the model with the specified ID.
 
 
-# Train a Model
+### Train a Model
 POST /train/{modelId}/{datasetIndex}
 
 Example:
@@ -148,7 +148,7 @@ Behavior:
 
 The updated model is returned as JSON.
 
-# Test a Model
+### Test a Model
 POST /test/{modelId}/{datasetIndex}
 
 Example:
@@ -162,7 +162,7 @@ Behavior:
 
 The updated model is returned as JSON.
 
-# Environment Variables
+## Environment Variables
 ### SEED_JOBS
 SEED_JOBS=true
 
@@ -170,20 +170,20 @@ If this variable is enabled, the service automatically creates **five demo model
 This allows immediate testing of the API without creating models manually.
 
 
-# Running the Project with Minikube
+## Running the Project with Minikube
 The service is intended to run inside a **local Kubernetes cluster using Minikube**.
 
-## 1 Start Minikube
+### 1 Start Minikube
 minikube start
 
-## 2 Use the Minikube Docker Environment
+### 2 Use the Minikube Docker Environment
 This allows Docker images to be built directly inside the cluster.
 eval $(minikube docker-env)
 
-## 3 Build the Docker Image
+### 3 Build the Docker Image
 docker build -t mlops-service .
 
-## 4 Deploy the Application
+### 4 Deploy the Application
 kubectl apply -f deployment.yaml
 kubectl apply -f service.yaml
 
@@ -191,12 +191,12 @@ This creates:
 * a Kubernetes Deployment
 * a Kubernetes Service
 
-# Accessing the Service
+## Accessing the Service
 After deployment you can access the service using:
 minikube service mlops-service
 or by using the NodePort defined in `service.yaml`.
 
-# Example Requests
+## Example Requests
 List models:
 curl http://localhost:8080/models
 
@@ -206,11 +206,11 @@ curl -X POST http://localhost:8080/train/12345/1
 Test a model:
 curl -X POST http://localhost:8080/test/12345/1
 
-# Notes
+## Notes
 * Models are stored **in memory only**.
 * Restarting the container or pod will remove all models.
 * The training algorithm is intentionally simplified for demonstration purposes.
 * The project is intended for experimenting with **Go services, Docker, and Kubernetes deployments**.
 
-# License
+## License
 This project is intended for educational purposes.
