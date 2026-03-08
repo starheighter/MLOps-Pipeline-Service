@@ -18,9 +18,6 @@ spec:
         imagePullPolicy: Never
         ports:
         - containerPort: 8080
-        env:
-        - name: SEED_JOBS
-          value: "true"
         livenessProbe:
           httpGet:
             path: /health

@@ -1,8 +1,7 @@
 package handlersservices
 
 import (
-	"fmt"
-	"math/rand"
+	"html/template"
 	"net/http"
 	"strconv"
 	"sync"
@@ -10,7 +9,6 @@ import (
 )
 
 type Model struct {
-	ID               string    `json:"id"`
 	Name             string    `json:"name"`
 	Status           string    `json:"status"`
 	CreatedAt        time.Time `json:"createdAt"`
@@ -18,6 +16,10 @@ type Model struct {
 	LearningRate     float64   `json:"learningRate"`
 	Loss             float64   `json:"loss"`
 	Weights          []float64 `json:"weights"`
+	TrainInputFile   string    `json:"trainInputFile"`
+	TrainOutputFile  string    `json:"trainOutputFile"`
+	TestInputFile    string    `json:"testInputFile"`
+	TestOutputFile   string    `json:"testOutputFile"`
 }
 
 var (
@@ -25,30 +27,40 @@ var (
 	mu     sync.Mutex
 )
 
-func CreateModel() *Model {
-	modelId := fmt.Sprintf("%d", 10000+rand.Intn(90000))
+func CreateModel(modelName string, numberTrainLoops int, learningRate float64) *Model {
 	model := &Model{
-		ID:               modelId,
-		Name:             "demo-model",
+		Name:             modelName,
 		Status:           "created",
 		CreatedAt:        time.Now(),
-		NumberTrainLoops: 0,
-		LearningRate:     0.0,
+		NumberTrainLoops: numberTrainLoops,
+		LearningRate:     learningRate,
 		Loss:             0.0,
 		Weights:          []float64{},
+		TrainInputFile:   "",
+		TrainOutputFile:  "",
+		TestInputFile:    "",
+		TestOutputFile:   "",
 	}
-	mu.Lock()
-	models[modelId] = model
-	mu.Unlock()
+	models[model.Name] = model
 	return model
 }
 
 func HandleTrain(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "templates/train.html")
+	tmpl, err := template.ParseFiles("templates/train.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tmpl.Execute(w, nil)
 }
 
 func HandleTest(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "templates/test.html")
+	tmpl, err := template.ParseFiles("templates/test.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tmpl.Execute(w, nil)
 }
 
 func HandleTraining(w http.ResponseWriter, r *http.Request) {
@@ -57,33 +69,28 @@ func HandleTraining(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.ParseMultipartForm(10 << 20)
-	modelId := r.FormValue("model_id")
-	mu.Lock()
-	model, ok := models[modelId]
-	if !ok {
-		mu.Unlock()
-		http.Error(w, "Model not found", http.StatusNotFound)
-		return
-	}
+	modelName := r.FormValue("model_name")
 	numberTrainLoops, err := strconv.Atoi(r.FormValue("number_train_loops"))
 	if err != nil {
 		mu.Unlock()
 		http.Error(w, "Number Train Loops must be a number", http.StatusBadRequest)
 		return
 	}
-	model.NumberTrainLoops = numberTrainLoops
 	learningRate, err := strconv.ParseFloat(r.FormValue("learning_rate"), 64)
 	if err != nil {
 		mu.Unlock()
 		http.Error(w, "Learning Rate must be a float", http.StatusBadRequest)
 		return
 	}
-	model.LearningRate = learningRate
+	mu.Lock()
+	model := CreateModel(modelName, numberTrainLoops, learningRate)
 	trainData := ExtractDataSet(w, r)
 	if trainData == nil {
 		mu.Unlock()
 		return
 	}
+	model.TrainInputFile = trainData.InputFile
+	model.TrainOutputFile = trainData.OutputFile
 	model.Weights = make([]float64, len(trainData.InputData[0]))
 	for trainLoop := 0; trainLoop < model.NumberTrainLoops; trainLoop++ {
 		for sampleIndex := 0; sampleIndex < len(trainData.InputData); sampleIndex++ {
@@ -109,9 +116,9 @@ func HandleTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.ParseMultipartForm(10 << 20)
-	modelId := r.FormValue("model_id")
+	modelName := r.FormValue("model_name")
 	mu.Lock()
-	model, ok := models[modelId]
+	model, ok := models[modelName]
 	if !ok {
 		mu.Unlock()
 		http.Error(w, "Model not found", http.StatusNotFound)
@@ -122,6 +129,8 @@ func HandleTesting(w http.ResponseWriter, r *http.Request) {
 		mu.Unlock()
 		return
 	}
+	model.TestInputFile = testData.InputFile
+	model.TestOutputFile = testData.OutputFile
 	loss := 0.0
 	for sampleIndex := 0; sampleIndex < len(testData.InputData); sampleIndex++ {
 		weightedSum := 0.0

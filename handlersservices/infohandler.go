@@ -22,9 +22,9 @@ func HandleHome(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleModel(w http.ResponseWriter, r *http.Request) {
-	modelId := r.URL.Path[len("/model/"):]
+	modelName := r.URL.Path[len("/model/"):]
 	mu.Lock()
-	model, ok := models[modelId]
+	model, ok := models[modelName]
 	mu.Unlock()
 	if !ok {
 		http.Error(w, "Model not found", http.StatusNotFound)

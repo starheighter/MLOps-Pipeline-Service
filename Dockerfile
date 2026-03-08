@@ -4,7 +4,8 @@ COPY . .
 RUN go build -o app .
 
 FROM alpine:latest
-WORKDIR /root/
+WORKDIR /app
 COPY --from=builder /app/app .
+COPY --from=builder /app/templates ./templates
 EXPOSE 8080
 CMD ["./app"]
