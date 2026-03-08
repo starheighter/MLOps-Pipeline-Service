@@ -1,12 +1,10 @@
 package handlersservices
 
 import (
-	"bufio"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -20,13 +18,6 @@ type Model struct {
 	LearningRate     float64   `json:"learningRate"`
 	Loss             float64   `json:"loss"`
 	Weights          []float64 `json:"weights"`
-}
-
-type DataSet struct {
-	InputFile  string      `json:"inputHeader"`
-	OutputFile string      `json:"outputHeader"`
-	Input      [][]float64 `json:"input"`
-	Output     []float64   `json:"output"`
 }
 
 var (
@@ -44,7 +35,7 @@ func CreateModel() *Model {
 		NumberTrainLoops: 0,
 		LearningRate:     0.0,
 		Loss:             0.0,
-		Weights:          []float64{0.0, 0.0},
+		Weights:          []float64{},
 	}
 	mu.Lock()
 	models[modelId] = model
@@ -88,65 +79,22 @@ func HandleTraining(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	model.LearningRate = learningRate
-	inputFile, inputHeader, err := r.FormFile("input_file")
-	if err != nil {
+	trainData := ExtractDataSet(w, r)
+	if trainData == nil {
 		mu.Unlock()
-		http.Error(w, "Input file missing", http.StatusBadRequest)
 		return
 	}
-	defer inputFile.Close()
-	outputFile, outputHeader, err := r.FormFile("output_file")
-	if err != nil {
-		mu.Unlock()
-		http.Error(w, "Output file missing", http.StatusBadRequest)
-		return
-	}
-	defer outputFile.Close()
-	var inputData [][]float64
-	scanner := bufio.NewScanner(inputFile)
-	for scanner.Scan() {
-		line := scanner.Text()
-		values := strings.Fields(line)
-		var row []float64
-		for _, v := range values {
-			num, err := strconv.ParseFloat(v, 64)
-			if err != nil {
-				mu.Unlock()
-				http.Error(w, "Input data has to contain only float numbers", http.StatusBadRequest)
-				return
-			}
-			row = append(row, num)
-		}
-		inputData = append(inputData, row)
-	}
-	var outputData []float64
-	scanner = bufio.NewScanner(outputFile)
-	for scanner.Scan() {
-		line := scanner.Text()
-		num, err := strconv.ParseFloat(line, 64)
-		if err != nil {
-			mu.Unlock()
-			http.Error(w, "Output data has to contain only float numbers", http.StatusBadRequest)
-			return
-		}
-		outputData = append(outputData, num)
-	}
-	trainData := &DataSet{
-		InputFile:  inputHeader.Filename,
-		OutputFile: outputHeader.Filename,
-		Input:      inputData,
-		Output:     outputData,
-	}
+	model.Weights = make([]float64, len(trainData.InputData[0]))
 	for trainLoop := 0; trainLoop < model.NumberTrainLoops; trainLoop++ {
-		for exampleIndex := 0; exampleIndex < len(trainData.Input); exampleIndex++ {
+		for sampleIndex := 0; sampleIndex < len(trainData.InputData); sampleIndex++ {
 			weightedSum := 0.0
 			loss := 0.0
-			for featureIndex := 0; featureIndex < len(trainData.Input[exampleIndex]); featureIndex++ {
-				weightedSum += model.Weights[featureIndex] * trainData.Input[exampleIndex][featureIndex]
+			for featureIndex := 0; featureIndex < len(trainData.InputData[sampleIndex]); featureIndex++ {
+				weightedSum += model.Weights[featureIndex] * trainData.InputData[sampleIndex][featureIndex]
 			}
-			loss += weightedSum - trainData.Output[exampleIndex]
-			for featureIndex := 0; featureIndex < len(trainData.Input[exampleIndex]); featureIndex++ {
-				model.Weights[featureIndex] = model.Weights[featureIndex] - model.LearningRate*loss*trainData.Input[exampleIndex][featureIndex]
+			loss += weightedSum - trainData.OutputData[sampleIndex]
+			for featureIndex := 0; featureIndex < len(trainData.InputData[sampleIndex]); featureIndex++ {
+				model.Weights[featureIndex] = model.Weights[featureIndex] - model.LearningRate*loss*trainData.InputData[sampleIndex][featureIndex]
 			}
 		}
 	}
@@ -169,62 +117,18 @@ func HandleTesting(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Model not found", http.StatusNotFound)
 		return
 	}
-	inputFile, inputHeader, err := r.FormFile("input_file")
-	if err != nil {
+	testData := ExtractDataSet(w, r)
+	if testData == nil {
 		mu.Unlock()
-		http.Error(w, "Input file missing", http.StatusBadRequest)
 		return
-	}
-	defer inputFile.Close()
-	outputFile, outputHeader, err := r.FormFile("output_file")
-	if err != nil {
-		mu.Unlock()
-		http.Error(w, "Output file missing", http.StatusBadRequest)
-		return
-	}
-	defer outputFile.Close()
-	var inputData [][]float64
-	scanner := bufio.NewScanner(inputFile)
-	for scanner.Scan() {
-		line := scanner.Text()
-		values := strings.Fields(line)
-		var row []float64
-		for _, v := range values {
-			num, err := strconv.ParseFloat(v, 64)
-			if err != nil {
-				mu.Unlock()
-				http.Error(w, "Input data has to contain only float numbers", http.StatusBadRequest)
-				return
-			}
-			row = append(row, num)
-		}
-		inputData = append(inputData, row)
-	}
-	var outputData []float64
-	scanner = bufio.NewScanner(outputFile)
-	for scanner.Scan() {
-		line := scanner.Text()
-		num, err := strconv.ParseFloat(line, 64)
-		if err != nil {
-			mu.Unlock()
-			http.Error(w, "Output data has to contain only float numbers", http.StatusBadRequest)
-			return
-		}
-		outputData = append(outputData, num)
-	}
-	testData := &DataSet{
-		InputFile:  inputHeader.Filename,
-		OutputFile: outputHeader.Filename,
-		Input:      inputData,
-		Output:     outputData,
 	}
 	loss := 0.0
-	for exampleIndex := 0; exampleIndex < len(testData.Input); exampleIndex++ {
+	for sampleIndex := 0; sampleIndex < len(testData.InputData); sampleIndex++ {
 		weightedSum := 0.0
-		for featureIndex := 0; featureIndex < len(testData.Input[exampleIndex]); featureIndex++ {
-			weightedSum += model.Weights[featureIndex] * testData.Input[exampleIndex][featureIndex]
+		for featureIndex := 0; featureIndex < len(testData.InputData[sampleIndex]); featureIndex++ {
+			weightedSum += model.Weights[featureIndex] * testData.InputData[sampleIndex][featureIndex]
 		}
-		loss += weightedSum - testData.Output[exampleIndex]
+		loss += weightedSum - testData.OutputData[sampleIndex]
 	}
 	model.Loss = loss
 	model.Status = "tested"
